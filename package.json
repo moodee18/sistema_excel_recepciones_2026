@@ -1,0 +1,13 @@
+﻿{
+  "name": "excel-recepciones-addin",
+  "version": "1.0.0",
+  "description": "Office Web Add-in para extracciÃ³n de facturas y recepciones mÃ©dicas a Excel recepciones_2026",
+  "main": "src/taskpane/taskpane.html",
+  "scripts": {
+    "start": "npx serve -l 3000 --ssl-cert ./certs/cert.crt --ssl-key ./certs/key.key",
+    "serve": "npx http-server -p 3000 -S -C cert.pem -K key.pem"
+  },
+  "keywords": ["excel", "office-addin", "recepciones", "facturacion", "sat", "pdf-extractor"],
+  "author": "Abisalud",
+  "license": "MIT"
+}

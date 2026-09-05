@@ -1,0 +1,78 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asistente de Recepciones PDF</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+    
+    <!-- PDF.js para lectura de PDFs en el cliente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <link rel="stylesheet" href="taskpane.css" />
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="logo-container">
+            <span class="badge">ABISALUD</span>
+            <h2>ExtracciÃ³n de Recepciones</h2>
+        </div>
+        <p class="subtitle">Carga de facturas, remisiones y certificados a <code>recepciones_2026</code></p>
+    </header>
+
+    <main class="app-content">
+        <!-- Zona Drag and Drop -->
+        <div id="drop-zone" class="drop-zone">
+            <div class="drop-zone-icon">ðŸ“„</div>
+            <div class="drop-zone-text">Arrastra tu archivo PDF aquÃ­</div>
+            <div class="drop-zone-subtext">o haz clic para seleccionar</div>
+            <input type="file" id="file-input" accept=".pdf" style="display: none;" />
+        </div>
+
+        <!-- Estado / Progreso -->
+        <div id="status-card" class="status-card" style="display: none;">
+            <div class="status-header">
+                <span id="status-spinner" class="spinner"></span>
+                <span id="status-text" class="status-title">Procesando documento...</span>
+            </div>
+            <div class="progress-bar-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <div id="file-details" class="file-details"></div>
+        </div>
+
+        <!-- Vista Previa de Partidas ExtraÃ­das -->
+        <div id="preview-section" class="preview-section" style="display: none;">
+            <div class="section-header">
+                <h3>Partidas Encontradas (<span id="items-count">0</span>)</h3>
+                <span class="folio-badge">Folio: <strong id="preview-folio">-</strong></span>
+            </div>
+            
+            <div id="items-container" class="items-list"></div>
+
+            <!-- Botones de AcciÃ³n -->
+            <div class="actions-container">
+                <button id="btn-insert" class="btn btn-primary">
+                    <span>ðŸ“¥</span> Volcar a Hoja recepciones_2026
+                </button>
+                <button id="btn-copy" class="btn btn-secondary">
+                    <span>ðŸ“‹</span> Copiar Tabla Tabulada
+                </button>
+            </div>
+        </div>
+
+        <!-- Alertas y Mensajes -->
+        <div id="result-alert" class="result-alert" style="display: none;"></div>
+    </main>
+
+    <footer class="app-footer">
+        <span>Sincronizado con libro <strong>recepciones_2026.xlsx</strong></span>
+    </footer>
+
+    <script src="taskpane.js"></script>
+</body>
+</html>
