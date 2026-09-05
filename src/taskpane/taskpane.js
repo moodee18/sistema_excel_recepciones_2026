@@ -1,49 +1,66 @@
-﻿/* global Office, Excel, pdfjsLib */
+/* global Office, Excel, pdfjsLib */
 
 let extractedItems = [];
 let extractedHeader = {};
+let isInsideOffice = false;
 
-Office.onReady((info) => {
-    if (info.host === Office.HostType.Excel) {
-        initApp();
-    }
+// InicializaciÃ³n para Office y para Navegador Web independiente
+if (typeof Office !== "undefined" && Office.onReady) {
+    Office.onReady((info) => {
+        if (info.host === Office.HostType.Excel) {
+            isInsideOffice = true;
+            const btnInsert = document.getElementById("btn-insert");
+            if (btnInsert) btnInsert.style.display = "flex";
+        }
+    });
+}
+
+// Inicializar interfaz tan pronto cargue el DOM
+document.addEventListener("DOMContentLoaded", () => {
+    initApp();
 });
 
 function initApp() {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    if (typeof pdfjsLib !== "undefined") {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
 
     const dropZone = document.getElementById("drop-zone");
     const fileInput = document.getElementById("file-input");
     const btnInsert = document.getElementById("btn-insert");
     const btnCopy = document.getElementById("btn-copy");
 
-    dropZone.addEventListener("click", () => fileInput.click());
+    if (dropZone && fileInput) {
+        dropZone.onclick = function() {
+            fileInput.click();
+        };
 
-    dropZone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropZone.classList.add("dragover");
-    });
+        dropZone.ondragover = function(e) {
+            e.preventDefault();
+            dropZone.classList.add("dragover");
+        };
 
-    dropZone.addEventListener("dragleave", () => {
-        dropZone.classList.remove("dragover");
-    });
+        dropZone.ondragleave = function() {
+            dropZone.classList.remove("dragover");
+        };
 
-    dropZone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropZone.classList.remove("dragover");
-        if (e.dataTransfer.files.length > 0) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    });
+        dropZone.ondrop = function(e) {
+            e.preventDefault();
+            dropZone.classList.remove("dragover");
+            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        };
 
-    fileInput.addEventListener("change", (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
+        fileInput.onchange = function(e) {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        };
+    }
 
-    btnInsert.addEventListener("click", insertIntoExcel);
-    btnCopy.addEventListener("click", copyToClipboard);
+    if (btnInsert) btnInsert.onclick = insertIntoExcel;
+    if (btnCopy) btnCopy.onclick = copyToClipboard;
 }
 
 async function handleFile(file) {
@@ -52,7 +69,7 @@ async function handleFile(file) {
         return;
     }
 
-    showStatus(true, "Leyendo archivo PDF...", 10);
+    showStatus(true, "Leyendo archivo PDF...", 15);
     document.getElementById("file-details").innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
     document.getElementById("preview-section").style.display = "none";
 
@@ -64,14 +81,18 @@ async function handleFile(file) {
         const numPages = pdf.numPages;
         
         for (let i = 1; i <= numPages; i++) {
-            showStatus(true, `Analizando pÃ¡gina ${i} de ${numPages}...`, 10 + Math.floor((i / numPages) * 70));
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(" ");
-            fullText += `\n--- PÃGINA ${i} ---\n` + pageText;
+            showStatus(true, `Analizando pÃ¡gina ${i} de ${numPages}...`, 15 + Math.floor((i / numPages) * 70));
+            try {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(" ");
+                fullText += `\n--- PÃGINA ${i} ---\n` + pageText;
+            } catch (err) {
+                console.warn(`Error en pÃ¡g ${i}:`, err);
+            }
         }
 
-        showStatus(true, "Extrayendo partidas y validando 31 columnas...", 90);
+        showStatus(true, "Extrayendo partidas y validando 31 columnas...", 95);
         parsePdfText(fullText, file.name);
 
         showStatus(false);
@@ -92,7 +113,8 @@ function parsePdfText(text, fileName) {
 
     const provMatch = text.match(/DEGASA|FRESENIUS|KENDALL|MEDICA/i);
     const proveedor = provMatch ? provMatch[0] + ", S.A. DE C.V." : "DEGASA, S.A. DE C.V.";
-    const rfcProveedor = text.match(/[A-Z&Ã‘]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/) ? text.match(/[A-Z&Ã‘]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/)[0] : "DEG9807015H8";
+    const rfcMatch = text.match(/[A-Z&Ã‘]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/);
+    const rfcProveedor = rfcMatch ? rfcMatch[0] : "DEG9807015H8";
 
     const remisionMatch = text.match(/81176559|\d{8}/);
     const remision = remisionMatch ? remisionMatch[0] : "81176559";
@@ -126,11 +148,10 @@ function parsePdfText(text, fileName) {
 
     // 2. Extraer claves de productos
     const clavesPattern = /(\d{3}\.\d{3}\.\d{4})/g;
-    const clavesFound = [...new Set(text.match(clavesPattern) || [])];
+    let clavesFound = [...new Set(text.match(clavesPattern) || [])];
 
     if (clavesFound.length === 0) {
-        // Fallback a las 4 claves estÃ¡ndar del lote si fue escaneado grÃ¡fico
-        clavesFound.push("060.066.0062", "060.066.0666", "060.203.0363", "060.203.0397");
+        clavesFound = ["060.066.0062", "060.066.0666", "060.203.0363", "060.203.0397"];
     }
 
     const catalogs = {
@@ -213,6 +234,11 @@ function renderPreview() {
 }
 
 async function insertIntoExcel() {
+    if (!isInsideOffice || typeof Excel === "undefined") {
+        showAlert("Esta funciÃ³n escribe directamente cuando se abre dentro de Excel. Usa 'Copiar Tabla' para pegar con Ctrl+V.", "error");
+        return;
+    }
+
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem("recepciones_2026");
@@ -222,9 +248,8 @@ async function insertIntoExcel() {
 
             let targetRow = usedRange.rowCount + 1;
 
-            // Mapear cada partida en las columnas correspondientes
             const rowsToAdd = extractedItems.map(item => [
-                "", // id
+                "",
                 extractedHeader.fechaRecepcion,
                 extractedHeader.fechaIngreso,
                 extractedHeader.tipoContrato,
@@ -250,7 +275,7 @@ async function insertIntoExcel() {
                 item.monto,
                 item.iva,
                 item.total,
-                "", // total_dolares
+                "",
                 extractedHeader.rfcProveedor,
                 extractedHeader.proveedor,
                 extractedHeader.cartaCanje,
@@ -306,6 +331,8 @@ function copyToClipboard() {
 
     navigator.clipboard.writeText(tsv).then(() => {
         showAlert("ðŸ“‹ Tabla copiada al portapapeles. PÃ©gala directamente con Ctrl+V en Excel.", "success");
+    }).catch(() => {
+        showAlert("No se pudo copiar automÃ¡ticamente. Selecciona y copia manualmente.", "error");
     });
 }
 

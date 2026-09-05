@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
@@ -9,7 +9,7 @@
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
     
-    <!-- PDF.js para lectura de PDFs en el cliente -->
+    <!-- PDF.js para lectura de PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <link rel="stylesheet" href="taskpane.css" />
@@ -29,8 +29,8 @@
         <div id="drop-zone" class="drop-zone">
             <div class="drop-zone-icon">ðŸ“„</div>
             <div class="drop-zone-text">Arrastra tu archivo PDF aquÃ­</div>
-            <div class="drop-zone-subtext">o haz clic para seleccionar</div>
-            <input type="file" id="file-input" accept=".pdf" style="display: none;" />
+            <div class="drop-zone-subtext">o haz clic para seleccionar archivo</div>
+            <input type="file" id="file-input" accept=".pdf,application/pdf" style="display: none;" />
         </div>
 
         <!-- Estado / Progreso -->
@@ -48,7 +48,7 @@
         <!-- Vista Previa de Partidas ExtraÃ­das -->
         <div id="preview-section" class="preview-section" style="display: none;">
             <div class="section-header">
-                <h3>Partidas Encontradas (<span id="items-count">0</span>)</h3>
+                <h3>Partidas ExtraÃ­das (<span id="items-count">0</span>)</h3>
                 <span class="folio-badge">Folio: <strong id="preview-folio">-</strong></span>
             </div>
             
@@ -56,11 +56,11 @@
 
             <!-- Botones de AcciÃ³n -->
             <div class="actions-container">
-                <button id="btn-insert" class="btn btn-primary">
+                <button id="btn-insert" class="btn btn-primary" style="display: none;">
                     <span>ðŸ“¥</span> Volcar a Hoja recepciones_2026
                 </button>
                 <button id="btn-copy" class="btn btn-secondary">
-                    <span>ðŸ“‹</span> Copiar Tabla Tabulada
+                    <span>ðŸ“‹</span> Copiar Tabla Tabulada para Excel
                 </button>
             </div>
         </div>
