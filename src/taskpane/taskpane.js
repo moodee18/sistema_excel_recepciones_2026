@@ -279,13 +279,21 @@ async function handleFile(file) {
 
         document.getElementById("thumbnails-section").style.display = "block";
 
-        // Determinar si el documento es escaneado
-        if (digitalText.trim().length > 100) {
+        // 1. Detección Inteligente de Escaneo
+        // Un PDF se considera escaneado si:
+        // - El texto digital es escaso (< 180 caracteres)
+        // - O no contiene ninguna clave de insumo médico (###.###.####) ni RFC reconocible
+        const hasMedicalClaves = /(?:010|020|030|040|060|070|080)\.\d{3}\.\d{4}|\b\d{3}\.\d{3}\.\d{4}\b/.test(digitalText);
+        const hasRfcOrInvoice = /[A-Z&Ñ]{3,4}\d{6}[A-V1-9]|\b\d{8}\b|REMISI[OÓ]N|FACTURA/i.test(digitalText);
+        
+        if (digitalText.trim().length < 200 || (!hasMedicalClaves && !hasRfcOrInvoice)) {
+            isScannedDoc = true;
+        } else {
             isScannedDoc = false;
         }
 
         // Determinar motor a utilizar
-        const geminiKey = localStorage.getItem("gemini_api_key") || "";
+        const geminiKey = (localStorage.getItem("gemini_api_key") || "").trim();
         let engineToUse = selectedEngine;
 
         if (engineToUse === "auto") {
@@ -296,28 +304,43 @@ async function handleFile(file) {
             }
         }
 
-        let engineLabel = "Texto Digital";
+        let engineLabel = "⚡ Extracción Digital";
         if (engineToUse === "gemini") engineLabel = "🤖 IA Gemini Vision (Escaneo)";
         else if (engineToUse === "tesseract") engineLabel = "🔍 OCR Local Tesseract (Escaneo)";
-        else if (engineToUse === "digital") engineLabel = "⚡ Extracción Digital";
 
         document.getElementById("engine-used-badge").innerText = engineLabel;
 
         // 2. Ejecutar Extracción según el motor
+        let extractionSuccess = false;
         if (engineToUse === "gemini") {
             if (!geminiKey) {
-                showAlert("No has configurado una API Key de Gemini. Abriendo configuración...", "warning");
-                document.getElementById("settings-modal").style.display = "flex";
-                showStatus(false);
-                return;
+                showAlert("⚠️ Para usar IA Vision en escaneos, ingresa tu API Key en Configuración (⚙️). Usando OCR Local Tesseract...", "warning");
+                document.getElementById("engine-used-badge").innerText = "🔍 OCR Local Tesseract (Escaneo)";
+                await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
+            } else {
+                await processWithGeminiVision(currentPdfPagesCanvas, file.name);
             }
-            await processWithGeminiVision(currentPdfPagesCanvas, file.name);
+            extractionSuccess = extractedItems.length > 0;
         } else if (engineToUse === "tesseract") {
             await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
+            extractionSuccess = extractedItems.length > 0;
         } else {
             // Extracción digital rápida
             showStatus(true, "Analizando texto digital y partidas...", 85, "Estructurando 31 columnas");
             parsePdfText(digitalText, file.name);
+            extractionSuccess = extractedItems.length > 0;
+
+            // Si el análisis digital no encontró partidas reales, fallback a OCR/Vision
+            if (!extractionSuccess || extractedItems.length === 0) {
+                console.log("Extracción digital sin partidas. Activando OCR de respaldo...");
+                if (geminiKey) {
+                    document.getElementById("engine-used-badge").innerText = "🤖 IA Gemini Vision (Auto-Fallback)";
+                    await processWithGeminiVision(currentPdfPagesCanvas, file.name);
+                } else {
+                    document.getElementById("engine-used-badge").innerText = "🔍 OCR Local Tesseract (Auto-Fallback)";
+                    await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
+                }
+            }
         }
 
         showStatus(false);
