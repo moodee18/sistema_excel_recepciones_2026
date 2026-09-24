@@ -19,7 +19,7 @@
     <!-- Tesseract.js v5 para OCR Local 100% en el navegador -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-    <link rel="stylesheet" href="taskpane.css?v=2.0.1" />
+    <link rel="stylesheet" href="taskpane.css?v=2.1.0" />
 </head>
 
 <body>
@@ -36,7 +36,19 @@
     </header>
 
     <main class="app-content">
-        <!-- Selector de Motor de Análisis -->
+        <!-- Banner de Alerta si falta API Key -->
+        <div id="api-key-banner" class="api-key-banner" style="display: none;">
+            <div class="api-banner-content">
+                <span class="api-banner-icon">🔑</span>
+                <div class="api-banner-text">
+                    <strong>IA Vision requiere Gemini API Key</strong>
+                    <p>Configúrala para analizar escaneos con 100% de precisión.</p>
+                </div>
+            </div>
+            <button type="button" id="btn-banner-config" class="btn-xs btn-primary">Configurar</button>
+        </div>
+
+        <!-- Selector de Motor de Extracción -->
         <div class="engine-selector-container">
             <label class="section-label">Motor de Extracción para Escaneos:</label>
             <div class="engine-pills">
@@ -44,7 +56,7 @@
                     <span class="pill-icon">⚡</span> Auto
                 </button>
                 <button type="button" class="engine-pill" data-engine="gemini" id="engine-gemini" title="Inteligencia Artificial Vision para máxima precisión en escaneos médicos y facturas">
-                    <span class="pill-icon">🤖</span> IA Vision
+                    <span class="pill-icon">🤖</span> IA Vision <span id="ia-key-dot" class="engine-indicator warning" title="API Key no configurada"></span>
                 </button>
                 <button type="button" class="engine-pill" data-engine="tesseract" id="engine-tesseract" title="OCR local 100% offline dentro de tu navegador">
                     <span class="pill-icon">🔍</span> OCR Local
@@ -69,60 +81,60 @@
             <div class="progress-bar-container">
                 <div id="progress-bar" class="progress-bar"></div>
             </div>
-            <div id="status-subtext" class="status-subtext">Iniciando análisis...</div>
-            <div id="file-details" class="file-details"></div>
+            <p id="status-subtext" class="status-subtext">Iniciando...</p>
         </div>
 
-        <!-- Vista Previa de Páginas Escaneadas (Miniaturas) -->
+        <!-- Miniaturas de Páginas Renderizadas -->
         <div id="thumbnails-section" class="thumbnails-section" style="display: none;">
-            <div class="section-header-mini">
-                <span>Páginas Analizadas (<span id="page-count">0</span>)</span>
-                <button id="toggle-thumbs-btn" class="text-link-btn">Ocultar</button>
+            <div class="thumbnails-header">
+                <span class="thumbnails-title">Páginas Analizadas (<span id="page-count">0</span>)</span>
+                <button type="button" id="toggle-thumbs-btn" class="btn-link">Ocultar</button>
             </div>
-            <div id="thumbnails-container" class="thumbnails-container"></div>
+            <div id="thumbnails-container" class="thumbnails-grid"></div>
         </div>
 
-        <!-- Vista Previa y Edición de Datos Extraídos -->
+        <!-- Sección de Resultados / Previsualización -->
         <div id="preview-section" class="preview-section" style="display: none;">
-            <div class="section-header">
+            <div class="preview-header-bar">
                 <h3>Datos Extraídos (<span id="items-count">0</span> partidas)</h3>
-                <span class="engine-used-badge" id="engine-used-badge">IA Vision</span>
+                <span id="engine-used-badge" class="engine-badge">⚡ Digital</span>
             </div>
+            <p id="file-details" class="file-details-text"></p>
 
-            <!-- Cabecera de Recepción (Editable) -->
+            <!-- Datos de Cabecera Colapsables -->
             <details class="header-details-card" open>
-                <summary class="card-summary">
+                <summary class="details-summary">
                     <span>📋 Datos de Cabecera y Proveedor</span>
                     <span class="summary-hint">Clic para colapsar</span>
                 </summary>
                 <div class="header-grid">
                     <div class="form-group">
                         <label>Folio Entrada / SIIA</label>
-                        <input type="text" id="head-folio" class="form-input" placeholder="Ej. 2660" />
+                        <input type="text" id="head-folio" class="form-input" placeholder="Ej. 2678" />
                     </div>
                     <div class="form-group">
                         <label>Factura / Remisión</label>
-                        <input type="text" id="head-remision" class="form-input" placeholder="Ej. 81176559" />
+                        <input type="text" id="head-remision" class="form-input" placeholder="Ej. B26-AQ-224" />
                     </div>
                     <div class="form-group">
                         <label>Proveedor / Razón Social</label>
-                        <input type="text" id="head-proveedor" class="form-input" placeholder="Ej. DEGASA, S.A. DE C.V." />
+                        <input type="text" id="head-proveedor" class="form-input" placeholder="Ej. AMC BIOMEDICAL S.A. DE C.V." />
                     </div>
                     <div class="form-group">
                         <label>RFC Proveedor</label>
-                        <input type="text" id="head-rfc" class="form-input" placeholder="Ej. DEG9807015H8" />
+                        <input type="text" id="head-rfc" class="form-input" placeholder="Ej. ABI110629LA5" />
                     </div>
                     <div class="form-group">
                         <label>Contrato</label>
-                        <input type="text" id="head-contrato" class="form-input" placeholder="Ej. CS/AD/045/2026" />
+                        <input type="text" id="head-contrato" class="form-input" placeholder="Ej. LC/BMX/010/2026" />
                     </div>
                     <div class="form-group">
                         <label>Orden Suministro</label>
-                        <input type="text" id="head-orden" class="form-input" placeholder="Ej. OS-ADBMX-045-2026" />
+                        <input type="text" id="head-orden" class="form-input" placeholder="Ej. OS-LCBMX-010-2026" />
                     </div>
                     <div class="form-group">
                         <label>Procedimiento / Tipo Contrato</label>
-                        <input type="text" id="head-procedimiento" class="form-input" placeholder="Ej. AA-12-NEF..." />
+                        <input type="text" id="head-procedimiento" class="form-input" placeholder="Ej. LA-12-NEF-012NEF001-I-59-2025" />
                     </div>
                     <div class="form-group">
                         <label>Partida Presupuestal</label>
@@ -203,25 +215,38 @@
                     <p class="setting-desc">Permite analizar escaneos de alta complejidad, tablas médicas, sellos y notas manuscritas con 100% de precisión.</p>
                     <div class="input-with-action">
                         <input type="password" id="gemini-api-key-input" class="form-input" placeholder="AIzaSy..." />
-                        <button type="button" id="btn-toggle-key-visibility" class="btn-sm btn-secondary">👁️</button>
+                        <button type="button" id="btn-toggle-key-visibility" class="btn-sm btn-secondary" title="Ver / Ocultar">👁️</button>
                     </div>
-                    <small class="helper-text">La clave se almacena únicamente en tu navegador local (localStorage).</small>
+                    <small class="helper-text">
+                        ¿No tienes una clave gratuita? Consíguela en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Se almacena únicamente en tu navegador (localStorage).
+                    </small>
                 </div>
 
                 <div class="setting-item">
                     <label class="setting-title">Modelo de IA Gemini:</label>
                     <select id="gemini-model-select" class="form-input">
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ultrarrápido y Preciso - Recomendado)</option>
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recomendado - Ultrarrápido y Preciso)</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estable)</option>
                         <option value="gemini-1.5-pro">Gemini 1.5 Pro (Máxima capacidad de razonamiento)</option>
                     </select>
                 </div>
 
                 <div class="setting-item">
+                    <label class="setting-title">Páginas a procesar en escaneos largos:</label>
+                    <select id="pages-limit-select" class="form-input">
+                        <option value="auto">Automático (Páginas 1 a 4: Entrada y Factura) - Recomendado</option>
+                        <option value="3">Primeras 3 páginas</option>
+                        <option value="5">Primeras 5 páginas</option>
+                        <option value="all">Todas las páginas (puede tardar en documentos de 20+ págs)</option>
+                    </select>
+                    <small class="helper-text">Los expedientes contienen 20+ páginas con certificados. Analizar las primeras páginas extrae todo y ahorra tiempo.</small>
+                </div>
+
+                <div class="setting-item">
                     <label class="setting-title">Calidad de Renderizado Canvas para OCR:</label>
                     <select id="canvas-dpi-select" class="form-input">
-                        <option value="2.0">Alta Resolución (2.0x DPI - Recomendado)</option>
-                        <option value="2.5">Ultra Alta Resolución (2.5x DPI - Para escaneos borrosos)</option>
+                        <option value="1.8">Alta Resolución (1.8x DPI - Balance Óptimo)</option>
+                        <option value="2.0">Ultra Resolución (2.0x DPI)</option>
                         <option value="1.5">Estándar (1.5x DPI - Más rápido)</option>
                     </select>
                 </div>
@@ -245,6 +270,6 @@
         <span>Sincronizado con libro <strong>recepciones_2026.xlsx</strong> (31 Columnas)</span>
     </footer>
 
-    <script src="taskpane.js?v=2.0.1"></script>
+    <script src="taskpane.js?v=2.1.0"></script>
 </body>
 </html>

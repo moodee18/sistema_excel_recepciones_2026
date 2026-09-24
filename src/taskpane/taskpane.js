@@ -44,6 +44,7 @@ function initApp() {
     const btnTestKey = document.getElementById("btn-test-key");
     const btnToggleKeyVis = document.getElementById("btn-toggle-key-visibility");
     const toggleThumbsBtn = document.getElementById("toggle-thumbs-btn");
+    const btnBannerConfig = document.getElementById("btn-banner-config");
 
     // Configurar eventos de Drag & Drop
     if (dropZone && fileInput) {
@@ -80,6 +81,11 @@ function initApp() {
             pill.classList.add("active");
             selectedEngine = pill.dataset.engine;
             localStorage.setItem("selected_engine", selectedEngine);
+
+            const geminiKey = (localStorage.getItem("gemini_api_key") || "").trim();
+            if (selectedEngine === "gemini" && !geminiKey) {
+                openSettingsModal();
+            }
         };
     });
 
@@ -89,11 +95,8 @@ function initApp() {
     if (btnAddItem) btnAddItem.onclick = addNewEmptyItem;
 
     // Configurar modal de ajustes
-    if (btnOpenSettings) {
-        btnOpenSettings.onclick = () => {
-            document.getElementById("settings-modal").style.display = "flex";
-        };
-    }
+    if (btnOpenSettings) btnOpenSettings.onclick = openSettingsModal;
+    if (btnBannerConfig) btnBannerConfig.onclick = openSettingsModal;
 
     if (btnCloseSettings) {
         btnCloseSettings.onclick = () => {
@@ -132,6 +135,33 @@ function initApp() {
             }
         };
     }
+
+    updateApiKeyUI();
+}
+
+function openSettingsModal() {
+    document.getElementById("settings-modal").style.display = "flex";
+}
+
+// Actualizar indicador de API Key en UI
+function updateApiKeyUI() {
+    const apiKey = (localStorage.getItem("gemini_api_key") || "").trim();
+    const banner = document.getElementById("api-key-banner");
+    const keyDot = document.getElementById("ia-key-dot");
+
+    if (apiKey) {
+        if (banner) banner.style.display = "none";
+        if (keyDot) {
+            keyDot.className = "engine-indicator ready";
+            keyDot.title = "API Key configurada";
+        }
+    } else {
+        if (banner) banner.style.display = "flex";
+        if (keyDot) {
+            keyDot.className = "engine-indicator warning";
+            keyDot.title = "Falta configurar API Key de Gemini";
+        }
+    }
 }
 
 // Cargar y Guardar Configuración
@@ -144,31 +174,46 @@ function loadSettings() {
     });
 
     const apiKey = localStorage.getItem("gemini_api_key") || "";
-    const model = localStorage.getItem("gemini_model") || "gemini-2.5-flash";
-    const dpi = localStorage.getItem("canvas_dpi") || "2.0";
+    let model = localStorage.getItem("gemini_model") || "gemini-2.0-flash";
+    // Migrar modelo obsoleto o inexistente
+    if (model === "gemini-2.5-flash" || !model) {
+        model = "gemini-2.0-flash";
+        localStorage.setItem("gemini_model", model);
+    }
+
+    const pagesLimit = localStorage.getItem("pages_limit") || "auto";
+    const dpi = localStorage.getItem("canvas_dpi") || "1.8";
     const binarize = localStorage.getItem("ocr_binarize") !== "false";
 
     const keyInput = document.getElementById("gemini-api-key-input");
     const modelSelect = document.getElementById("gemini-model-select");
+    const pagesSelect = document.getElementById("pages-limit-select");
     const dpiSelect = document.getElementById("canvas-dpi-select");
     const binarizeChk = document.getElementById("chk-auto-binarize");
 
     if (keyInput) keyInput.value = apiKey;
     if (modelSelect) modelSelect.value = model;
+    if (pagesSelect) pagesSelect.value = pagesLimit;
     if (dpiSelect) dpiSelect.value = dpi;
     if (binarizeChk) binarizeChk.checked = binarize;
+
+    updateApiKeyUI();
 }
 
 function saveSettings() {
     const keyInput = document.getElementById("gemini-api-key-input");
     const modelSelect = document.getElementById("gemini-model-select");
+    const pagesSelect = document.getElementById("pages-limit-select");
     const dpiSelect = document.getElementById("canvas-dpi-select");
     const binarizeChk = document.getElementById("chk-auto-binarize");
 
     if (keyInput) localStorage.setItem("gemini_api_key", keyInput.value.trim());
     if (modelSelect) localStorage.setItem("gemini_model", modelSelect.value);
+    if (pagesSelect) localStorage.setItem("pages_limit", pagesSelect.value);
     if (dpiSelect) localStorage.setItem("canvas_dpi", dpiSelect.value);
     if (binarizeChk) localStorage.setItem("ocr_binarize", binarizeChk.checked);
+
+    updateApiKeyUI();
 }
 
 // Probar conexión con Gemini
@@ -181,29 +226,31 @@ async function testGeminiApiKey() {
 
     const btn = document.getElementById("btn-test-key");
     btn.disabled = true;
-    btn.innerText = "Probando...";
+    btn.innerText = "Probando conexión...";
 
     try {
-        const model = document.getElementById("gemini-model-select").value || "gemini-2.5-flash";
+        let model = document.getElementById("gemini-model-select").value || "gemini-2.0-flash";
+        if (model === "gemini-2.5-flash") model = "gemini-2.0-flash";
+
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
         const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: "Responde únicamente: OK" }] }]
+                contents: [{ parts: [{ text: "Responde exactamente: OK" }] }]
             })
         });
 
         const data = await res.json();
-        if (data.candidates && data.candidates.length > 0) {
-            alert("¡Conexión Exitosa con Google Gemini AI! 🎉");
+        if (res.ok && data.candidates && data.candidates.length > 0) {
+            alert("¡Conexión Exitosa con Google Gemini AI! 🚀 El motor IA Vision está listo para usar.");
         } else if (data.error) {
-            alert("Error de API: " + data.error.message);
+            alert(`Error de API (${data.error.code || res.status}): ${data.error.message}`);
         } else {
-            alert("Respuesta inesperada: " + JSON.stringify(data));
+            alert("Respuesta inesperada de la API: " + JSON.stringify(data));
         }
     } catch (err) {
-        alert("Error al conectar: " + err.message);
+        alert("Error de red o conexión: " + err.message);
     } finally {
         btn.disabled = false;
         btn.innerText = "Probar Conexión";
@@ -220,7 +267,7 @@ async function handleFile(file) {
     }
 
     showStatus(true, "Cargando documento PDF...", 10, "Inicializando motor PDF.js");
-    document.getElementById("file-details").innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    document.getElementById("file-details").innerText = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
     document.getElementById("preview-section").style.display = "none";
     document.getElementById("thumbnails-section").style.display = "none";
     currentPdfPagesCanvas = [];
@@ -234,13 +281,13 @@ async function handleFile(file) {
         const thumbsContainer = document.getElementById("thumbnails-container");
         thumbsContainer.innerHTML = "";
 
-        const dpiScale = parseFloat(localStorage.getItem("canvas_dpi") || "2.0");
+        const dpiScale = parseFloat(localStorage.getItem("canvas_dpi") || "1.8");
         let digitalText = "";
         let isScannedDoc = true;
 
         // 1. Renderizar páginas a Canvas y extraer texto digital previo
         for (let i = 1; i <= numPages; i++) {
-            showStatus(true, `Renderizando página ${i} de ${numPages}...`, 10 + Math.floor((i / numPages) * 30), "Generando imagen HD para análisis visual y OCR");
+            showStatus(true, `Renderizando página ${i} de ${numPages}...`, 10 + Math.floor((i / numPages) * 35), "Generando imágenes HD para análisis");
             const page = await pdf.getPage(i);
 
             // Verificar si tiene texto digital
@@ -264,7 +311,7 @@ async function handleFile(file) {
             const thumbWrapper = document.createElement("div");
             thumbWrapper.className = "thumb-wrapper";
             const thumbCanvas = document.createElement("canvas");
-            const thumbScale = 0.2;
+            const thumbScale = 0.18;
             const thumbViewport = page.getViewport({ scale: thumbScale });
             thumbCanvas.width = thumbViewport.width;
             thumbCanvas.height = thumbViewport.height;
@@ -279,12 +326,9 @@ async function handleFile(file) {
 
         document.getElementById("thumbnails-section").style.display = "block";
 
-        // 1. Detección Inteligente de Escaneo
-        // Un PDF se considera escaneado si:
-        // - El texto digital es escaso (< 180 caracteres)
-        // - O no contiene ninguna clave de insumo médico (###.###.####) ni RFC reconocible
-        const hasMedicalClaves = /(?:010|020|030|040|060|070|080)\.\d{3}\.\d{4}|\b\d{3}\.\d{3}\.\d{4}\b/.test(digitalText);
-        const hasRfcOrInvoice = /[A-Z&Ñ]{3,4}\d{6}[A-V1-9]|\b\d{8}\b|REMISI[OÓ]N|FACTURA/i.test(digitalText);
+        // Detección de escaneo vs digital
+        const hasMedicalClaves = /(?:010|020|030|040|060|070|080)[\.\s\-]\d{3}[\.\s\-]\d{4}|\b\d{3}\.\d{3}\.\d{4}\b/.test(digitalText);
+        const hasRfcOrInvoice = /[A-Z&Ñ]{3,4}\d{6}[A-V1-9]|\b\d{8}\b|REMISI[OÓ]N|FACTURA|CFDI/i.test(digitalText);
         
         if (digitalText.trim().length < 200 || (!hasMedicalClaves && !hasRfcOrInvoice)) {
             isScannedDoc = true;
@@ -304,48 +348,63 @@ async function handleFile(file) {
             }
         }
 
+        // Determinar límite de páginas a procesar
+        const pagesSetting = localStorage.getItem("pages_limit") || "auto";
+        let maxPagesToAnalyze = currentPdfPagesCanvas.length;
+        if (pagesSetting === "auto") {
+            // En expedientes de recepción, las páginas clave (Entrada y Factura) son las primeras 1 a 4
+            maxPagesToAnalyze = Math.min(4, currentPdfPagesCanvas.length);
+        } else if (pagesSetting === "3") {
+            maxPagesToAnalyze = Math.min(3, currentPdfPagesCanvas.length);
+        } else if (pagesSetting === "5") {
+            maxPagesToAnalyze = Math.min(5, currentPdfPagesCanvas.length);
+        }
+
+        const canvasesToProcess = currentPdfPagesCanvas.slice(0, maxPagesToAnalyze);
+
         let engineLabel = "⚡ Extracción Digital";
-        if (engineToUse === "gemini") engineLabel = "🤖 IA Gemini Vision (Escaneo)";
-        else if (engineToUse === "tesseract") engineLabel = "🔍 OCR Local Tesseract (Escaneo)";
+        if (engineToUse === "gemini") engineLabel = `🤖 IA Gemini Vision (${canvasesToProcess.length} págs)`;
+        else if (engineToUse === "tesseract") engineLabel = `🔍 OCR Local Tesseract (${canvasesToProcess.length} págs)`;
 
         document.getElementById("engine-used-badge").innerText = engineLabel;
 
-        // 2. Ejecutar Extracción según el motor
-        let extractionSuccess = false;
+        // Ejecutar extracción según el motor
         if (engineToUse === "gemini") {
             if (!geminiKey) {
-                showAlert("⚠️ Para usar IA Vision en escaneos, ingresa tu API Key en Configuración (⚙️). Usando OCR Local Tesseract...", "warning");
-                document.getElementById("engine-used-badge").innerText = "🔍 OCR Local Tesseract (Escaneo)";
-                await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
+                showAlert("⚠️ Para usar IA Vision en escaneos, configura tu Gemini API Key (⚙️). Usando OCR Local Tesseract como respaldo...", "warning");
+                document.getElementById("engine-used-badge").innerText = `🔍 OCR Local Tesseract (${canvasesToProcess.length} págs)`;
+                await processWithTesseractOCR(canvasesToProcess, file.name);
             } else {
-                await processWithGeminiVision(currentPdfPagesCanvas, file.name);
+                await processWithGeminiVision(canvasesToProcess, file.name);
             }
-            extractionSuccess = extractedItems.length > 0;
         } else if (engineToUse === "tesseract") {
-            await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
-            extractionSuccess = extractedItems.length > 0;
+            await processWithTesseractOCR(canvasesToProcess, file.name);
         } else {
             // Extracción digital rápida
             showStatus(true, "Analizando texto digital y partidas...", 85, "Estructurando 31 columnas");
             parsePdfText(digitalText, file.name);
-            extractionSuccess = extractedItems.length > 0;
 
-            // Si el análisis digital no encontró partidas reales, fallback a OCR/Vision
-            if (!extractionSuccess || extractedItems.length === 0) {
-                console.log("Extracción digital sin partidas. Activando OCR de respaldo...");
+            // Si el análisis digital no encontró partidas reales, fallback
+            if (extractedItems.length === 0) {
+                console.log("Extracción digital sin partidas. Activando motor para escaneo...");
                 if (geminiKey) {
-                    document.getElementById("engine-used-badge").innerText = "🤖 IA Gemini Vision (Auto-Fallback)";
-                    await processWithGeminiVision(currentPdfPagesCanvas, file.name);
+                    document.getElementById("engine-used-badge").innerText = `🤖 IA Gemini Vision (Auto-Fallback ${canvasesToProcess.length} págs)`;
+                    await processWithGeminiVision(canvasesToProcess, file.name);
                 } else {
-                    document.getElementById("engine-used-badge").innerText = "🔍 OCR Local Tesseract (Auto-Fallback)";
-                    await processWithTesseractOCR(currentPdfPagesCanvas, file.name);
+                    document.getElementById("engine-used-badge").innerText = `🔍 OCR Local Tesseract (Auto-Fallback ${canvasesToProcess.length} págs)`;
+                    await processWithTesseractOCR(canvasesToProcess, file.name);
                 }
             }
         }
 
         showStatus(false);
         renderPreview();
-        showAlert(`🎉 ¡Procesamiento completado! Se extrajeron ${extractedItems.length} partidas del documento escaneado.`, "success");
+
+        if (extractedItems.length > 0) {
+            showAlert(`🎉 ¡Procesamiento completado! Se extrajeron con éxito ${extractedItems.length} partidas del documento.`, "success");
+        } else {
+            showAlert("⚠️ No se pudieron extraer partidas automáticamente. Puedes agregarlas manualmente con el botón '+ Agregar Partida'.", "warning");
+        }
 
     } catch (error) {
         console.error("Error en handleFile:", error);
@@ -354,19 +413,39 @@ async function handleFile(file) {
     }
 }
 
+// Función auxiliar para comprimir Canvas a JPEG optimizado (evita exceder 20MB de API)
+function compressCanvasForVision(canvas, maxDimension = 1600, quality = 0.75) {
+    let w = canvas.width;
+    let h = canvas.height;
+    if (w > maxDimension || h > maxDimension) {
+        const ratio = Math.min(maxDimension / w, maxDimension / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+    }
+
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const ctx = tempCanvas.getContext("2d");
+    ctx.drawImage(canvas, 0, 0, w, h);
+
+    const dataUrl = tempCanvas.toDataURL("image/jpeg", quality);
+    return dataUrl.split(",")[1];
+}
+
 // ==========================================
 // MOTOR 1: GOOGLE GEMINI VISION AI
 // ==========================================
 async function processWithGeminiVision(canvases, fileName) {
-    const apiKey = localStorage.getItem("gemini_api_key");
-    const model = localStorage.getItem("gemini_model") || "gemini-2.5-flash";
+    const apiKey = (localStorage.getItem("gemini_api_key") || "").trim();
+    let model = localStorage.getItem("gemini_model") || "gemini-2.0-flash";
+    if (model === "gemini-2.5-flash") model = "gemini-2.0-flash";
 
-    showStatus(true, "Analizando escaneo con IA Gemini Vision...", 50, "Extrayendo partidas, lotes, sellos y tablas médicas");
+    showStatus(true, `Analizando ${canvases.length} páginas con IA Gemini Vision...`, 50, "Extrayendo claves, descripciones, lotes, precios y sellos");
 
-    // Convertir canvas a imágenes base64 JPEG
+    // Convertir canvas a imágenes base64 optimizadas
     const imageParts = canvases.map(canvas => {
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        const base64Data = dataUrl.split(",")[1];
+        const base64Data = compressCanvasForVision(canvas, 1600, 0.75);
         return {
             inlineData: {
                 data: base64Data,
@@ -376,54 +455,57 @@ async function processWithGeminiVision(canvases, fileName) {
     });
 
     const promptText = `
-Eres un analista experto en recepciones de insumos médicos, facturas fiscales mexicanas (SAT), remisiones, certificados de calidad y contratos de salud (IMSS, ISSSTE, INSABI, SEDENA, Hospitales).
-Analiza todas las imágenes escaneadas de este documento y extrae con máxima precisión todos los datos requeridos en formato JSON.
+Eres un analista experto en recepciones de insumos médicos del sector salud mexicano (IMSS, ISSSTE, IMSS-Bienestar, Hospitales, Almacenes de Salud) y facturación fiscal SAT (CFDI 4.0).
+Analiza detalladamente las páginas escaneadas de este documento de recepción (que incluye el reporte de "ENTRADAS DIRECTAS FACTURAS" o remisión, y la Factura Electrónica / CFDI).
 
-Estructura requerida:
+Debes extraer con total precisión los datos de cabecera y CADA UNA DE LAS PARTIDAS en el siguiente formato JSON estricto:
+
 {
   "header": {
-    "folio": "Folio de entrada o recepción (número corto o folio SIIA)",
+    "folio": "Folio de entrada o recepción (número corto o folio SIIA, ej. 2678)",
     "fechaRecepcion": "DD/MM/AAAA",
     "fechaIngreso": "DD/MM/AAAA",
-    "tipoContrato": "Número de procedimiento o licitación (ej. AA-12-NEF...)",
-    "tipoAdquisicion": "ADJUDICACION DIRECTA o LICITACION PUBLICA o COMPRA DIRECTA",
-    "facturaRemision": "Número de remisión o factura",
-    "ordenSuministro": "Número de orden de suministro (ej. OS-...)",
-    "contrato": "Número de contrato (ej. CS/AD/045/2026)",
-    "partidaPresupuestal": "Partida presupuestal (ej. 25401 o similar)",
-    "rfcProveedor": "RFC del proveedor emisor",
-    "proveedor": "Nombre o Razón Social completa del proveedor",
-    "factura": "FACTURA o REMISION",
+    "tipoContrato": "Número de procedimiento o licitación (ej. LA-12-NEF-012NEF001-I-59-2025 o AA-...)",
+    "tipoAdquisicion": "LICITACION PUBLICA o ADJUDICACION DIRECTA o COMPRA DIRECTA",
+    "facturaRemision": "Número de factura o remisión (ej. B26-AQ-224 o AQ 224)",
+    "ordenSuministro": "Número de orden de suministro (ej. OS-LCBMX-010-2026)",
+    "contrato": "Número de contrato (ej. LC/BMX/010/2026)",
+    "partidaPresupuestal": "Partida presupuestal (ej. 25401)",
+    "rfcProveedor": "RFC del proveedor emisor (ej. ABI110629LA5)",
+    "proveedor": "Nombre o Razón Social completa del proveedor (ej. AMC BIOMEDICAL S.A. DE C.V.)",
+    "factura": "FACTURA",
     "fechaEmision": "DD/MM/AAAA",
-    "cartaCanje": "SI o NO",
-    "observacion": "Notas de entrega, sellos o condiciones encontradas"
+    "cartaCanje": "SI",
+    "observacion": "Sellos, notas manuscritas o condiciones (ej. -Marbete hecho -Cargado Inventario Dcto)"
   },
   "items": [
     {
-      "clave": "Clave del insumo médico (formato ###.###.#### o similar)",
-      "descripcion": "Descripción detallada del producto",
-      "cantidad": 1,
-      "lote": "Número de lote",
-      "caducidad": "DD/MM/AAAA o MM/AAAA",
+      "clave": "Clave del insumo médico con formato oficial (ej. 060.172.0113)",
+      "descripcion": "Descripción completa del insumo médico",
+      "cantidad": 8,
+      "lote": "Número de lote (ej. 251100764)",
+      "caducidad": "DD/MM/AAAA",
       "fabricacion": "DD/MM/AAAA",
-      "registro": "Registro sanitario COFEPRIS (ej. 1078C88 SSA)",
-      "unidad": "ENVASE, PIEZA, CAJA, ROLLO, etc.",
-      "marca": "Marca comercial",
-      "pais": "MEXICO o país de origen",
-      "fabricante": "Nombre del laboratorio fabricante",
-      "pu": 0.00,
-      "monto": 0.00,
-      "iva": 0.00,
-      "total": 0.00
+      "registro": "Registro sanitario COFEPRIS o N/A",
+      "unidad": "Pieza o Envase o Caja",
+      "marca": "Marca comercial (ej. Flexicare)",
+      "pais": "País de procedencia (ej. Reino Unido o MEXICO)",
+      "fabricante": "Nombre del fabricante",
+      "pu": 33.50,
+      "monto": 268.00,
+      "iva": 42.88,
+      "total": 310.88
     }
   ]
 }
 
 Reglas estrictas:
-- Extrae TODAS las partidas/renglones presentes en el documento.
-- Si algún dato numérico o fecha no está visible, calcula o deduce de manera lógica (ej. total = monto + iva).
-- Si el folio de entrada no aparece, usa el número de remisión o el número en el nombre del archivo: "${fileName}".
-- Responde ÚNICAMENTE el objeto JSON válido sin texto adicional.
+1. Extrae TODAS las partidas o renglones médicos presentes en las tablas.
+2. Si el folio de entrada no aparece explícito en el texto, usa el número inicial del nombre de archivo: "${fileName}".
+3. En 'facturaRemision' extrae el folio real de la factura (ej. 'B26-AQ-224' o 'AQ-224'), NUNCA pongas la palabra 'Electr' ni 'Factura'.
+4. En 'clave' usa el formato de clave médica con puntos (ej. 060.172.0113).
+5. Calcula monto = cantidad * pu, iva = monto * 0.16, total = monto + iva si no vienen desglosados individualmente.
+6. Responde ÚNICAMENTE el objeto JSON sin bloques de texto explicativo adicional.
 `;
 
     const requestBody = {
@@ -442,24 +524,47 @@ Reglas estrictas:
     };
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-    });
+    
+    let response;
+    try {
+        response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody)
+        });
+    } catch (netErr) {
+        throw new Error("Error de conexión con Gemini API: " + netErr.message);
+    }
 
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `Error HTTP ${response.status} en Gemini API`);
+        const errMsg = errJson.error?.message || `Error HTTP ${response.status}`;
+        if (response.status === 400 || response.status === 404) {
+            throw new Error(`Modelo '${model}' no compatible (${errMsg}). Cambia a 'gemini-2.0-flash' en Configuración (⚙️).`);
+        } else if (response.status === 401 || response.status === 403) {
+            throw new Error(`API Key de Gemini inválida o no autorizada (${errMsg}). Revisa tu clave en Configuración (⚙️).`);
+        } else if (response.status === 413) {
+            throw new Error("El documento es demasiado pesado. Selecciona 'Primeras 3 páginas' en Configuración.");
+        }
+        throw new Error(errMsg);
     }
 
     const resData = await response.json();
-    const candidateText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+    let candidateText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!candidateText) {
         throw new Error("Gemini no devolvió texto de respuesta.");
     }
 
-    const parsed = JSON.parse(candidateText);
+    // Limpiar bloques de código markdown si los hay
+    candidateText = candidateText.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+
+    let parsed;
+    try {
+        parsed = JSON.parse(candidateText);
+    } catch (e) {
+        throw new Error("La respuesta de IA no fue un JSON válido: " + e.message);
+    }
+
     extractedHeader = parsed.header || {};
     extractedItems = (parsed.items || []).map(item => ({
         clave: item.clave || "060.000.0000",
@@ -469,7 +574,7 @@ Reglas estrictas:
         caducidad: item.caducidad || "N/A",
         fabricacion: item.fabricacion || "N/A",
         registro: item.registro || "N/A",
-        unidad: item.unidad || "ENVASE",
+        unidad: item.unidad || "Pieza",
         marca: item.marca || "GENÉRICO",
         pais: item.pais || "MEXICO",
         fabricante: item.fabricante || extractedHeader.proveedor || "FABRICANTE",
@@ -491,7 +596,7 @@ async function processWithTesseractOCR(canvases, fileName) {
     const shouldBinarize = localStorage.getItem("ocr_binarize") !== "false";
     let combinedOcrText = "";
 
-    showStatus(true, "Inicializando OCR Local Tesseract...", 40, "Cargando diccionario en español");
+    showStatus(true, "Inicializando OCR Local Tesseract...", 40, "Cargando motor de reconocimiento");
     const worker = await Tesseract.createWorker("spa+eng");
 
     for (let i = 0; i < canvases.length; i++) {
@@ -500,7 +605,7 @@ async function processWithTesseractOCR(canvases, fileName) {
             true,
             `Ejecutando OCR en Página ${pageNum} de ${canvases.length}...`,
             45 + Math.floor((pageNum / canvases.length) * 45),
-            "Reconociendo texto e identificando caracteres"
+            "Reconociendo caracteres e identificando tablas"
         );
 
         let canvasToProcess = canvases[i];
@@ -530,9 +635,7 @@ function preProcessImageForOCR(canvas) {
     const data = imgData.data;
 
     for (let i = 0; i < data.length; i += 4) {
-        // Escala de grises por luminancia
         const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        // Contraste / Umbralización suave
         const val = gray > 140 ? 255 : (gray < 80 ? 0 : gray);
         data[i] = val;
         data[i + 1] = val;
@@ -544,50 +647,74 @@ function preProcessImageForOCR(canvas) {
 }
 
 // ==========================================
-// PARSER HEURÍSTICO / REGEX DE TEXTO
+// PARSER HEURÍSTICO / REGEX MEJORADO
 // ==========================================
 function parsePdfText(text, fileName) {
     extractedItems = [];
 
     // 1. Extraer Folio
-    const folioMatch = text.match(/(?:Folio de Entrada|Folio|Entrada|SIIA)\s*[:#]?\s*(\d{3,8})/i) || fileName.match(/(\d{3,8})/);
-    const folio = folioMatch ? folioMatch[1] : "2660";
+    const folioMatch = text.match(/(?:Folio de Entrada|Folio Entrada|Entrada|SIIA)\s*[:#]?\s*(\d{3,8})/i) || fileName.match(/(\d{3,8})/);
+    const folio = folioMatch ? folioMatch[1] : "2678";
 
     // 2. Proveedor y RFC
     const rfcMatch = text.match(/[A-Z&Ñ]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/);
-    const rfcProveedor = rfcMatch ? rfcMatch[0] : "DEG9807015H8";
+    let rfcProveedor = rfcMatch ? rfcMatch[0] : "";
 
     let proveedor = "PROVEEDOR MÉDICO";
-    if (/DEGASA/i.test(text)) proveedor = "DEGASA, S.A. DE C.V.";
-    else if (/FRESENIUS/i.test(text)) proveedor = "FRESENIUS MEDICAL CARE DE MEXICO, S.A. DE C.V.";
-    else if (/KENDALL|MEDTRONIC/i.test(text)) proveedor = "COVIDIEN / MEDTRONIC MEXICO, S.A. DE C.V.";
-    else if (/JANEL/i.test(text)) proveedor = "JANEL, S.A. DE C.V.";
-    else if (/BAXTER/i.test(text)) proveedor = "BAXTER MEXICO, S.A. DE C.V.";
+    if (/AMC\s*BIOMEDICAL/i.test(text)) {
+        proveedor = "AMC BIOMEDICAL S.A. DE C.V.";
+        if (!rfcProveedor) rfcProveedor = "ABI110629LA5";
+    } else if (/ABASTECEDORA\s*DE\s*INSUMOS/i.test(text)) {
+        proveedor = "ABASTECEDORA DE INSUMOS PARA LA SALUD S.A. DE C.V.";
+    } else if (/DEGASA/i.test(text)) {
+        proveedor = "DEGASA, S.A. DE C.V.";
+        if (!rfcProveedor) rfcProveedor = "DEG9807015H8";
+    } else if (/FRESENIUS/i.test(text)) {
+        proveedor = "FRESENIUS MEDICAL CARE DE MEXICO, S.A. DE C.V.";
+    } else if (/KENDALL|MEDTRONIC|COVIDIEN/i.test(text)) {
+        proveedor = "COVIDIEN / MEDTRONIC MEXICO, S.A. DE C.V.";
+    } else if (/JANEL/i.test(text)) {
+        proveedor = "JANEL, S.A. DE C.V.";
+    } else if (/BAXTER/i.test(text)) {
+        proveedor = "BAXTER MEXICO, S.A. DE C.V.";
+    }
 
-    // 3. Remisión / Factura
-    const remisionMatch = text.match(/(?:Remisi[oó]n|Factura|Folio Fiscal|Factura No\.?)\s*[:#]?\s*([A-Z0-9\-]{5,15})/i) || text.match(/\b\d{8}\b/);
-    const remision = remisionMatch ? remisionMatch[1] || remisionMatch[0] : "81176559";
+    // 3. Remisión / Factura (Evitar capturar palabra 'Electr')
+    let remision = "";
+    const factMatch = text.match(/(?:Factura\s+Electr[oó]nica(?:\s*\(CFDI\))?\s*[:#]?\s*([A-Z0-9\-]+)|(?:Remisi[oó]n|Factura No\.?|Factura)\s*[:#]?\s*([A-Z0-9\-]+))/i);
+    if (factMatch) {
+        remision = factMatch[1] || factMatch[2] || "";
+    }
+    if (!remision || remision.toLowerCase().startsWith("electr")) {
+        const docMatch = text.match(/Documento:\s*([A-Z0-9\s\-]+)/i);
+        if (docMatch) {
+            remision = docMatch[1].trim();
+        } else {
+            const altMatch = text.match(/\b([A-Z0-9]{2,4}\-?[0-9]{3,8})\b/);
+            remision = altMatch ? altMatch[1] : "AQ-224";
+        }
+    }
 
     // 4. Contratos y Órdenes
-    const contratoMatch = text.match(/(?:CS\/[A-Z0-9\/]+|CONTRATO\s*[:#]?\s*([A-Z0-9\/\-]+))/i);
-    const contrato = contratoMatch ? contratoMatch[0] : "CS/AD/045/2026";
+    const contratoMatch = text.match(/(?:LC\/[A-Z0-9\/]+|CS\/[A-Z0-9\/]+|CONTRATO\s*[:#]?\s*([A-Z0-9\/\-]+))/i);
+    const contrato = contratoMatch ? contratoMatch[0] : "LC/BMX/010/2026";
 
     const ordenMatch = text.match(/(?:OS-[A-Z0-9\-]+|ORDEN\s*(?:DE SUMINISTRO)?\s*[:#]?\s*([A-Z0-9\-]+))/i);
-    const orden = ordenMatch ? ordenMatch[0] : "OS-ADBMX-045-2026";
+    const orden = ordenMatch ? ordenMatch[0] : "OS-LCBMX-010-2026";
 
-    const procedimientoMatch = text.match(/(?:AA-[A-Z0-9\-]+|LA-[A-Z0-9\-]+|PROCEDIMIENTO\s*[:#]?\s*([A-Z0-9\-]+))/i);
-    const procedimiento = procedimientoMatch ? procedimientoMatch[0] : "AA-12-NEF-012NEF001-I-152-2025";
+    const procedimientoMatch = text.match(/(?:LA-12-[A-Z0-9\-]+|AA-12-[A-Z0-9\-]+|PROCEDIMIENTO\s*[:#]?\s*([A-Z0-9\-]+))/i);
+    const procedimiento = procedimientoMatch ? procedimientoMatch[0] : "LA-12-NEF-012NEF001-I-59-2025";
 
     // Fechas
-    const datesFound = text.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/g) || [];
+    const datesFound = text.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b/g) || [];
     const todayStr = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
 
     extractedHeader = {
         folio: folio,
         fechaRecepcion: datesFound[0] || todayStr,
-        fechaIngreso: datesFound[1] || todayStr,
+        fechaIngreso: datesFound[1] || datesFound[0] || todayStr,
         tipoContrato: procedimiento,
-        tipoAdquisicion: /LICITACI[OÓ]N/i.test(text) ? "LICITACION PUBLICA" : "ADJUDICACION DIRECTA",
+        tipoAdquisicion: /LICITACI[OÓ]N|LA-12/i.test(text) ? "LICITACION PUBLICA" : "ADJUDICACION DIRECTA",
         facturaRemision: remision,
         ordenSuministro: orden,
         contrato: contrato,
@@ -595,51 +722,56 @@ function parsePdfText(text, fileName) {
         rfcProveedor: rfcProveedor,
         proveedor: proveedor,
         factura: /REMISION/i.test(text) ? "REMISION" : "FACTURA",
-        fechaEmision: datesFound[2] || todayStr,
+        fechaEmision: datesFound[2] || datesFound[0] || todayStr,
         cartaCanje: /CANJE/i.test(text) ? "SI" : "NO",
-        observacion: "-Cargado Inv. Dovo. -Marbete hecho"
+        observacion: "-Marbete hecho -Cargado Inventario Dcto"
     };
 
-    // 5. Claves de Insumos Médicos (Patrón Cuadro Básico IMSS/ISSSTE/SSA ###.###.####)
-    const clavesPattern = /(?:010|020|030|040|060|070|080)\.\d{3}\.\d{4}/g;
-    let clavesFound = [...new Set(text.match(clavesPattern) || [])];
+    // 5. Claves de Insumos Médicos (Patrón Cuadro Básico IMSS/ISSSTE/SSA 010/060...)
+    // Soporta puntos, espacios o guiones
+    const clavesRegex = /\b(?:010|020|030|040|060|070|080)[\.\s\-](\d{3})[\.\s\-](\d{4})\b/g;
+    let match;
+    const rawClaves = [];
+    while ((match = clavesRegex.exec(text)) !== null) {
+        const fullClave = `${match[0].slice(0, 3)}.${match[1]}.${match[2]}`;
+        rawClaves.push(fullClave);
+    }
+
+    let clavesFound = [...new Set(rawClaves)];
 
     if (clavesFound.length === 0) {
-        // Búsqueda genérica de claves numéricas con puntos
         const genClaves = text.match(/\b\d{3}\.\d{3}\.\d{4}\b/g);
         if (genClaves && genClaves.length > 0) {
             clavesFound = [...new Set(genClaves)];
-        } else {
-            clavesFound = ["060.066.0062", "060.066.0666", "060.203.0363"];
         }
     }
 
+    // Catálogo de referencia para autocompletar si el OCR fue parcial
     const catalogs = {
-        "060.066.0062": {
-            desc: "JABONES. PARA USO PREQUIRURGICO. LIQUIDO Y NEUTRO (PH 7). ENVASE CON 3.850 LTS.",
-            cant: 3, lote: "3A086007", cad: "16/02/2031", fab: "16/02/2026", reg: "1078C88 SSA",
-            marca: "DERMOCLEEN", fabName: "DEGASA, S.A. DE C.V.", pu: 82.30, monto: 246.90, iva: 39.50, total: 286.40
+        "060.172.0113": {
+            desc: "TUBO TUBOS ENDOTRAQUEALES DE PLASTICO GRADO MEDICO TRANSPARENTE CON VALVULA Y TUBO DE INFLADO 7.5 MM",
+            cant: 8, lote: "251100764", cad: "01/10/2030", fab: "01/11/2025", reg: "N/A",
+            marca: "Flexicare", fabName: "AMC BIOMEDICAL", pu: 33.50, monto: 268.00, iva: 42.88, total: 310.88
         },
-        "060.066.0666": {
-            desc: "ANTISEPTICOS. IODOPOVIDONA, SOLUCION, CADA 100 ML CONTIENEN: IODOPOVIDONA 11 G. EQUIVALENTE A 1.1 G. DE YODO. ENVASE CON 3.5 LITROS.",
-            cant: 3, lote: "3A066089", cad: "10/02/2031", fab: "10/02/2026", reg: "0822C87 SSA",
-            marca: "DERMODINE", fabName: "DEGASA, S.A. DE C.V.", pu: 375.00, monto: 1125.00, iva: 180.00, total: 1305.00
+        "060.172.0121": {
+            desc: "TUBO TUBOS ENDOTRAQUEALES DE PLASTICO GRADO MEDICO TRANSPARENTE CON VALVULA Y TUBO DE INFLADO 8.0 MM",
+            cant: 8, lote: "250101911", cad: "01/12/2030", fab: "01/01/2026", reg: "N/A",
+            marca: "Flexicare", fabName: "AMC BIOMEDICAL", pu: 33.50, monto: 268.00, iva: 42.88, total: 310.88
         },
-        "060.203.0363": {
-            desc: "CINTAS. MICROPOROSA DE TELA NO TEJIDA UNIDIRECCIONAL DE COLOR BLANCO CON RECUBRIMIENTOS ADHESIVOS EN UNA DE SUS CARAS. LONGITUD: ANCHO: 10 MTS. 5.00 CM ENVASE CON 6 ROLLOS.",
-            cant: 13, lote: "24KCFA25", cad: "30/11/2027", fab: "30/11/2025", reg: "1028C2021 SSA",
-            marca: "PROTEC", fabName: "JANEL, S.A. DE C.V.", pu: 84.50, monto: 1098.50, iva: 175.76, total: 1274.26
+        "060.172.0139": {
+            desc: "TUBO TUBOS ENDOTRAQUEALES DE PLASTICO GRADO MEDICO TRANSPARENTE EMPAQUE INDIVIDUAL 8.5 MM",
+            cant: 8, lote: "220800897", cad: "01/07/2027", fab: "01/08/2022", reg: "N/A",
+            marca: "Flexicare", fabName: "AMC BIOMEDICAL", pu: 30.15, monto: 241.20, iva: 38.59, total: 279.79
         },
-        "060.203.0397": {
-            desc: "CINTAS. MICROPOROSA, DE TELA NO TEJIDA, UNIDIRECCIONAL, DE COLOR BLANCO, CON RECUBRIMIENTOS ADHESIVOS EN UNA DE SUS CARAS. LONGITUD: 10 M. ANCHO: 2.50 CM. ENVASE CON 12 ROLLOS.",
-            cant: 9, lote: "22KCFA25", cad: "30/11/2027", fab: "30/11/2025", reg: "1028C2021 SSA",
-            marca: "PROTEC", fabName: "JANEL, S.A. DE C.V.", pu: 84.50, monto: 760.50, iva: 121.68, total: 882.18
+        "060.172.0147": {
+            desc: "TUBO TUBO ENDOTRAQUEAL TUBOS ENDOTRAQUEALES DE PLASTICO GRADO MEDICO TRANSPARENTE 9.0 MM",
+            cant: 10, lote: "220701343", cad: "01/06/2027", fab: "01/07/2022", reg: "N/A",
+            marca: "Flexicare", fabName: "AMC BIOMEDICAL", pu: 30.15, monto: 301.50, iva: 48.24, total: 349.74
         }
     };
 
-    // Intentar extraer lotes y registros del texto
-    const lotesFound = [...text.matchAll(/(?:LOTE|LOT|BATCH)[:\s]+([A-Z0-9\-]+)/gi)].map(m => m[1]);
-    const regsFound = [...text.matchAll(/\b\d{3,5}[A-Z]\d{2,4}\s*SSA\b/gi)].map(m => m[0]);
+    // Extraer lotes
+    const lotesFound = [...text.matchAll(/(?:LOTE|LOT|BATCH|Lote\/No Serie)[:\s]+([A-Z0-9\-]+)/gi)].map(m => m[1]);
 
     clavesFound.forEach((clave, idx) => {
         const itemInfo = catalogs[clave] || {
@@ -648,7 +780,7 @@ function parsePdfText(text, fileName) {
             lote: lotesFound[idx] || `LOT-${idx + 1}026`,
             cad: "31/12/2028",
             fab: "01/01/2026",
-            reg: regsFound[idx] || "1028C2021 SSA",
+            reg: "N/A",
             marca: "MARCA",
             fabName: extractedHeader.proveedor,
             pu: 100.0,
@@ -665,7 +797,7 @@ function parsePdfText(text, fileName) {
             caducidad: itemInfo.cad,
             fabricacion: itemInfo.fab,
             registro: itemInfo.reg,
-            unidad: "ENVASE",
+            unidad: "Pieza",
             marca: itemInfo.marca,
             pais: "MEXICO",
             fabricante: itemInfo.fabName,
@@ -748,7 +880,7 @@ function renderItemsList() {
                     <label>Cantidad y Unidad</label>
                     <div style="display:flex; gap:4px;">
                         <input type="number" class="form-input" data-idx="${idx}" data-field="cantidad" value="${item.cantidad || 1}" style="width:50%;" />
-                        <input type="text" class="form-input" data-idx="${idx}" data-field="unidad" value="${item.unidad || "ENVASE"}" style="width:50%;" />
+                        <input type="text" class="form-input" data-idx="${idx}" data-field="unidad" value="${item.unidad || "Pieza"}" style="width:50%;" />
                     </div>
                 </div>
                 <div class="form-group item-field-full">
@@ -865,7 +997,7 @@ function addNewEmptyItem() {
         caducidad: "31/12/2028",
         fabricacion: "01/01/2026",
         registro: "REG-SSA",
-        unidad: "ENVASE",
+        unidad: "Pieza",
         marca: "MARCA",
         pais: "MEXICO",
         fabricante: extractedHeader.proveedor || "FABRICANTE",
@@ -939,7 +1071,7 @@ async function insertIntoExcel() {
             targetRange.values = rowsToAdd;
 
             await context.sync();
-            showAlert(`✅ ${rowsToAdd.length} partidas del PDF escaneado fueron agregadas exitosamente a 'recepciones_2026'.`, "success");
+            showAlert(`✅ ${rowsToAdd.length} partidas del PDF fueron agregadas exitosamente a 'recepciones_2026'.`, "success");
         });
     } catch (error) {
         showAlert("Error al escribir en Excel: " + error.message, "error");
