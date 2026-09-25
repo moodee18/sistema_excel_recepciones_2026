@@ -19,7 +19,7 @@
     <!-- Tesseract.js v5 para OCR Local 100% en el navegador -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-    <link rel="stylesheet" href="taskpane.css?v=2.1.0" />
+    <link rel="stylesheet" href="taskpane.css?v=2.3.0" />
 </head>
 
 <body>
@@ -225,9 +225,10 @@
                 <div class="setting-item">
                     <label class="setting-title">Modelo de IA Gemini:</label>
                     <select id="gemini-model-select" class="form-input">
-                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recomendado 2026 - Ultrarrápido y Preciso)</option>
-                        <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Recomendado 2026 - Ultrarrápido, Cero Saturación)</option>
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Alta Estabilidad)</option>
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Alta Precisión)</option>
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Alta Capacidad)</option>
                     </select>
                 </div>
 
@@ -270,6 +271,6 @@
         <span>Sincronizado con libro <strong>recepciones_2026.xlsx</strong> (32 Columnas A-AF)</span>
     </footer>
 
-    <script src="taskpane.js?v=2.2.0"></script>
+    <script src="taskpane.js?v=2.3.0"></script>
 </body>
 </html>

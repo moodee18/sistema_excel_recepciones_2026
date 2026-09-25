@@ -163,9 +163,11 @@ function loadSettings() {
     });
 
     const apiKey = localStorage.getItem("gemini_api_key") || "";
-    let model = localStorage.getItem("gemini_model") || "gemini-3.8-flash";
-    if (model === "gemini-2.0-flash" || model === "gemini-2.5-flash" || model === "gemini-1.5-flash" || model === "gemini-1.5-pro" || !model) {
-        model = "gemini-3.8-flash";
+    let model = localStorage.getItem("gemini_model");
+    
+    // Migración automática: 'gemini-3.5-flash-lite' es el modelo recomendado 2026, ultrarrápido y sin saturación 503
+    if (!model || model === "gemini-3.8-flash" || model === "gemini-2.0-flash" || model === "gemini-2.5-flash" || model === "gemini-1.5-flash" || model === "gemini-1.5-pro") {
+        model = "gemini-3.5-flash-lite";
         localStorage.setItem("gemini_model", model);
     }
 
@@ -216,27 +218,55 @@ async function testGeminiApiKey() {
     btn.innerText = "Probando conexión...";
 
     try {
-        let model = document.getElementById("gemini-model-select")?.value || "gemini-3.8-flash";
-        if (model === "gemini-2.0-flash" || model === "gemini-2.5-flash" || model === "gemini-1.5-flash" || model === "gemini-1.5-pro") {
-            model = "gemini-3.8-flash";
+        let preferredModel = document.getElementById("gemini-model-select")?.value || "gemini-3.5-flash-lite";
+        const candidateModels = [
+            preferredModel,
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.6-flash"
+        ].filter((v, i, a) => a.indexOf(v) === i);
+
+        let success = false;
+        let workingModel = "";
+        let lastError = "";
+
+        for (const mod of candidateModels) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${key}`;
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Responde exactamente: OK" }] }]
+                    })
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.candidates && data.candidates.length > 0) {
+                    success = true;
+                    workingModel = mod;
+                    break;
+                } else if (data.error) {
+                    lastError = `[${mod}] ${data.error.message}`;
+                    if (data.error.code === 400 && data.error.message.includes("API key not valid")) {
+                        lastError = "API Key no válida. Por favor verifica tu clave.";
+                        break;
+                    }
+                }
+            } catch (netErr) {
+                lastError = netErr.message;
+            }
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-        const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: "Responde exactamente: OK" }] }]
-            })
-        });
-
-        const data = await res.json();
-        if (res.ok && data.candidates && data.candidates.length > 0) {
-            alert("¡Conexión Exitosa con Google Gemini AI! 🚀 El motor IA Vision está listo para usar.");
-        } else if (data.error) {
-            alert(`Error de API (${data.error.code || res.status}): ${data.error.message}`);
+        if (success) {
+            if (workingModel !== preferredModel) {
+                const modelSelect = document.getElementById("gemini-model-select");
+                if (modelSelect) modelSelect.value = workingModel;
+                localStorage.setItem("gemini_model", workingModel);
+            }
+            alert(`✅ ¡Conexión Exitosa con Google Gemini AI!\n\nModelo activo: ${workingModel}\nEl motor IA Vision está listo para procesar tus facturas.`);
         } else {
-            alert("Respuesta inesperada de la API: " + JSON.stringify(data));
+            alert(`❌ Error al conectar con Gemini: ${lastError}`);
         }
     } catch (err) {
         alert("Error de red o conexión: " + err.message);
@@ -275,7 +305,6 @@ async function handleFile(file) {
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const numPages = pdf.numPages;
 
-        document.getElementById("page-count").innerText = numPages;
         const thumbsContainer = document.getElementById("thumbnails-container");
         thumbsContainer.innerHTML = "";
 
@@ -320,7 +349,7 @@ async function handleFile(file) {
         document.getElementById("thumbnails-section").style.display = "block";
 
         const hasMedicalClaves = /(?:010|020|030|040|060|070|080)[\.\s\-]\d{3}[\.\s\-]\d{4}|\b\d{3}\.\d{3}\.\d{4}\b/.test(digitalText);
-        const hasRfcOrInvoice = /[A-Z&Ñ]{3,4}\d{6}[A-V1-9]|\b\d{8}\b|REMISI[OÓ]N|FACTURA|CFDI/i.test(digitalText);
+        const hasRfcOrInvoice = /[A-Z&Ñ']{3,4}\d{6}[A-V1-9]|\b\d{8}\b|REMISI[OÓ]N|FACTURA|CFDI/i.test(digitalText);
         const isScannedDoc = digitalText.trim().length < 200 || (!hasMedicalClaves && !hasRfcOrInvoice);
 
         const geminiKey = (localStorage.getItem("gemini_api_key") || "").trim();
@@ -346,6 +375,11 @@ async function handleFile(file) {
         }
 
         const canvasesToProcess = currentPdfPagesCanvas.slice(0, maxPagesToAnalyze);
+
+        const pageCountEl = document.getElementById("page-count");
+        if (pageCountEl) {
+            pageCountEl.innerText = canvasesToProcess.length < numPages ? `${canvasesToProcess.length} de ${numPages}` : `${numPages}`;
+        }
 
         let engineLabel = "⚡ Extracción Digital";
         if (engineToUse === "gemini") engineLabel = `🤖 IA Gemini Vision (${canvasesToProcess.length} págs)`;
@@ -419,16 +453,34 @@ function compressCanvasForVision(canvas, maxDimension = 1600, quality = 0.75) {
 // ==========================================
 async function processWithGeminiVision(canvases, fileName, hintedFolio = "", hintedDate = "") {
     const apiKey = (localStorage.getItem("gemini_api_key") || "").trim();
-    let model = localStorage.getItem("gemini_model") || "gemini-3.8-flash";
-    if (model === "gemini-2.0-flash" || model === "gemini-2.5-flash" || model === "gemini-1.5-flash" || model === "gemini-1.5-pro") {
-        model = "gemini-3.8-flash";
-        localStorage.setItem("gemini_model", model);
+    if (!apiKey) {
+        throw new Error("Falta configurar la Gemini API Key. Ve a Configuración (⚙️) para agregarla.");
     }
+
+    let preferredModel = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
+    if (preferredModel === "gemini-2.0-flash" || preferredModel === "gemini-2.5-flash" || preferredModel === "gemini-1.5-flash" || preferredModel === "gemini-1.5-pro") {
+        preferredModel = "gemini-3.5-flash-lite";
+        localStorage.setItem("gemini_model", preferredModel);
+    }
+
+    // Lista ordenada de modelos a probar (iniciando con el preferido del usuario)
+    const candidateModels = [
+        preferredModel,
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-3.8-flash"
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+    // Ajuste dinámico de resolución según cantidad de páginas
+    const isManyPages = canvases.length > 4;
+    const maxDim = isManyPages ? 1100 : 1500;
+    const quality = isManyPages ? 0.65 : 0.75;
 
     showStatus(true, `Analizando ${canvases.length} páginas con IA Gemini Vision...`, 50, "Extrayendo campos para el libro recepciones_2026");
 
     const imageParts = canvases.map(canvas => {
-        const base64Data = compressCanvasForVision(canvas, 1600, 0.75);
+        const base64Data = compressCanvasForVision(canvas, maxDim, quality);
         return {
             inlineData: {
                 data: base64Data,
@@ -531,52 +583,131 @@ Devuelve la información ÚNICAMENTE en el siguiente JSON estructurado:
         }
     };
 
-    let currentModel = model;
-    let url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
-    
-    let response;
-    try {
-        response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody)
-        });
-    } catch (netErr) {
-        throw new Error("Error de red con Gemini API: " + netErr.message);
+    let resData = null;
+    let successfulModel = null;
+    let lastErrorMsg = "";
+
+    // Probar candidatos con política de resiliencia
+    for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+        const currentModel = candidateModels[mIdx];
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (mIdx > 0 || attempt > 1) {
+                    showStatus(
+                        true,
+                        `Procesando con ${currentModel} (Intento ${attempt})...`,
+                        55 + (mIdx * 8),
+                        "Reintentando por saturación temporal en servidores de Google..."
+                    );
+                }
+
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (response.ok) {
+                    resData = await response.json();
+                    successfulModel = currentModel;
+                    break;
+                }
+
+                const errJson = await response.json().catch(() => ({}));
+                const errMsg = errJson.error?.message || `Error HTTP ${response.status}`;
+                lastErrorMsg = errMsg;
+
+                const isHighDemand = response.status === 503 || response.status === 429 || errMsg.includes("high demand") || errMsg.includes("spikes");
+                const isModelUnavailable = response.status === 404 || response.status === 400 || errMsg.includes("no longer available");
+
+                if (isHighDemand) {
+                    console.warn(`[Gemini API] Modelo '${currentModel}' con alta demanda (503/429).`);
+                    if (attempt === 1) {
+                        // Esperar 1.5s antes del segundo intento
+                        await new Promise(r => setTimeout(r, 1500));
+                        continue;
+                    }
+                    // Pasar al siguiente modelo de la lista
+                    break;
+                } else if (isModelUnavailable) {
+                    console.warn(`[Gemini API] Modelo '${currentModel}' retirado o no compatible: ${errMsg}`);
+                    break; // Probar siguiente modelo
+                } else if (response.status === 401 || response.status === 403) {
+                    throw new Error(`API Key de Gemini inválida o sin permisos (${errMsg}). Revisa tu clave en Configuración (⚙️).`);
+                } else if (response.status === 413) {
+                    console.warn("[Gemini API] Payload excede tamaño (413). Pasando a análisis optimizado de páginas clave...");
+                    break;
+                } else {
+                    break;
+                }
+            } catch (netErr) {
+                lastErrorMsg = netErr.message;
+                if (netErr.message && netErr.message.includes("API Key")) throw netErr;
+                console.warn(`[Gemini API] Error con '${currentModel}': ${netErr.message}`);
+                break;
+            }
+        }
+
+        if (resData) break;
     }
 
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson.error?.message || `Error HTTP ${response.status}`;
-        
-        // Auto-recuperación si Google indica que el modelo fue retirado o no disponible
-        if (currentModel !== "gemini-3.8-flash" && (errMsg.includes("no longer available") || response.status === 404 || response.status === 400)) {
-            console.warn(`Modelo '${currentModel}' no disponible (${errMsg}). Reintentando con 'gemini-3.8-flash'...`);
-            currentModel = "gemini-3.8-flash";
-            localStorage.setItem("gemini_model", "gemini-3.8-flash");
-            const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
-            response = await fetch(fallbackUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(requestBody)
-            });
-            if (!response.ok) {
-                const fbJson = await response.json().catch(() => ({}));
-                throw new Error(fbJson.error?.message || `Error con Gemini 3.8 Flash: HTTP ${response.status}`);
+    // Auto-recuperación si el PDF largo de 22 páginas falló por carga de GPU en servidores:
+    // Reintentar exclusivamente con las primeras 4 páginas principales (Entrada y Factura CFDI)
+    if (!resData && canvases.length > 4) {
+        console.warn("Reintentando análisis con las 4 páginas principales (Factura/Entrada)...");
+        showStatus(true, "Optimizando expediente largo: Analizando páginas 1 a 4...", 75, "Extrayendo datos de Factura y Remisión");
+
+        const keyCanvases = canvases.slice(0, 4);
+        const keyImageParts = keyCanvases.map(c => ({
+            inlineData: {
+                data: compressCanvasForVision(c, 1400, 0.75),
+                mimeType: "image/jpeg"
             }
-        } else {
-            if (response.status === 400 || response.status === 404) {
-                throw new Error(`Modelo '${currentModel}' no compatible (${errMsg}). Selecciona 'Gemini 3.8 Flash' en Configuración (⚙️).`);
-            } else if (response.status === 401 || response.status === 403) {
-                throw new Error(`API Key de Gemini inválida o sin permisos (${errMsg}). Revisa tu clave en Configuración (⚙️).`);
-            } else if (response.status === 413) {
-                throw new Error("El documento excede el tamaño máximo. Selecciona 'Primeras 3 páginas' en Configuración.");
+        }));
+
+        const reducedBody = {
+            contents: [{ parts: [{ text: promptText }, ...keyImageParts] }],
+            generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+        };
+
+        for (const fallbackMod of ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]) {
+            try {
+                const fbUrl = `https://generativelanguage.googleapis.com/v1beta/models/${fallbackMod}:generateContent?key=${apiKey}`;
+                const fbRes = await fetch(fbUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(reducedBody)
+                });
+                if (fbRes.ok) {
+                    resData = await fbRes.json();
+                    successfulModel = fallbackMod;
+                    break;
+                }
+            } catch (e) {
+                console.warn(`Fallo en reintento optimizado con ${fallbackMod}: ${e.message}`);
             }
-            throw new Error(errMsg);
         }
     }
 
-    const resData = await response.json();
+    // Failsafe final: Si Google Gemini sigue inaccesible, usar OCR Local para no dejar al usuario bloqueado
+    if (!resData) {
+        console.warn("Servidores de Google Gemini con alta demanda prolongada. Activando OCR Local de respaldo...");
+        showAlert("⚠️ Los servidores de IA de Google presentaron saturación temporal. Activando OCR Local automáticamente para extraer tus partidas...", "warning");
+        document.getElementById("engine-used-badge").innerText = `🔍 OCR Local Tesseract (Auto-Respaldo)`;
+        await processWithTesseractOCR(canvases.slice(0, Math.min(4, canvases.length)), fileName);
+        return;
+    }
+
+    // Guardar el modelo que funcionó exitosamente para que futuras consultas no sufran saturación
+    if (successfulModel && successfulModel !== preferredModel) {
+        localStorage.setItem("gemini_model", successfulModel);
+        const sel = document.getElementById("gemini-model-select");
+        if (sel) sel.value = successfulModel;
+        console.log(`Modelo optimizado automáticamente a: ${successfulModel}`);
+    }
+
     let candidateText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!candidateText) {
         throw new Error("Gemini no devolvió texto de respuesta.");
@@ -684,7 +815,7 @@ function parsePdfText(text, fileName) {
     const folioMatch = text.match(/(?:Folio de Entrada|Folio Entrada|Entrada|SIIA)\s*[:#]?\s*(\d{3,8})/i) || fileName.match(/(\d{3,8})/);
     const folio = folioMatch ? folioMatch[1] : (hintedFolio || "2678");
 
-    const rfcMatch = text.match(/[A-Z&Ñ]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/);
+    const rfcMatch = text.match(/[A-Z&Ñ']{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]/);
     let rfcProveedor = rfcMatch ? rfcMatch[0] : "";
 
     let proveedor = "PROVEEDOR MÉDICO";
